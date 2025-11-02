@@ -1,0 +1,91 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Large Model Files
+*.h5
+*.hdf5
+*.pkl
+*.pth
+*.ckpt
+*.model
+
+# Large Dataset Files
+data/
+*.csv
+*.json
+*.txt.gz
+*.zip
+*.tar.gz
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads and Static Files (generated)
+static/uploads/
+static/*.jpg
+static/*.jpeg
+static/*.png
+static/*.gif
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# Distribution
+.dist/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
