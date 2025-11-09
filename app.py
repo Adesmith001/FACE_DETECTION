@@ -80,6 +80,15 @@ except Exception as e:
 def index():
     return render_template('index.html')
 
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model is not None,
+        'environment': 'render' if os.environ.get('RENDER') else 'local'
+    })
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
