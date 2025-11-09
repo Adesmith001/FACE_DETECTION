@@ -1,17 +1,21 @@
-from flask import Flask, render_template, request #type: ignore
+from flask import Flask, render_template, request, jsonify #type: ignore
 import tensorflow as tf #type: ignore
 from tensorflow.keras.models import load_model #type: ignore
 import numpy as np #type: ignore
 import cv2 #type: ignore
 import sqlite3
 import os
+import tempfile
+from werkzeug.utils import secure_filename
 
 # Configure TensorFlow for low memory usage
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 tf.config.threading.set_inter_op_parallelism_threads(1)
 tf.config.threading.set_intra_op_parallelism_threads(1)
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Function to create model architecture manually
 def create_model():
@@ -62,10 +66,15 @@ model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accur
 # Emotion labels in FER2013 order
 emotion_labels = ['Angry','Disgust','Fear','Happy','Sad','Surprise','Neutral']
 
-# Create database if missing
-conn = sqlite3.connect('database.db')
-conn.execute('CREATE TABLE IF NOT EXISTS uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, emotion TEXT)')
-conn.close()
+# Create database if missing - use /tmp for Render
+DB_PATH = os.path.join(tempfile.gettempdir(), 'database.db') if os.environ.get('RENDER') else 'database.db'
+
+try:
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('CREATE TABLE IF NOT EXISTS uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, emotion TEXT)')
+    conn.close()
+except Exception as e:
+    print(f"Database setup warning: {e}")
 
 @app.route('/')
 def index():
@@ -73,30 +82,58 @@ def index():
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    file = request.files['file']
-    if file:
-        filepath = os.path.join('static', file.filename)
-        os.makedirs('static', exist_ok=True)
-        file.save(filepath)
-
-        # Load image
-        img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-        img = cv2.resize(img, (48,48))
-        img = img.reshape(1,48,48,1) / 255.0
-
+    try:
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        
+        # Read image directly from memory instead of saving to disk
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        img = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
+        
+        if img is None:
+            return jsonify({'error': 'Invalid image file'}), 400
+        
+        # Preprocess image
+        img = cv2.resize(img, (48, 48))
+        img = img.reshape(1, 48, 48, 1) / 255.0
+        
         # Predict emotion with reduced memory
         prediction = model.predict(img, verbose=0)
         emotion_index = np.argmax(prediction)
         emotion = emotion_labels[emotion_index]
-
-        # Log to database
-        conn = sqlite3.connect('database.db')
-        conn.execute("INSERT INTO uploads (filename, emotion) VALUES (?, ?)", (file.filename, emotion))
-        conn.commit()
-        conn.close()
-
-        return f"Predicted Emotion: {emotion}"
-    return "No file uploaded"
+        confidence = float(np.max(prediction)) * 100
+        
+        # Log to database (with error handling)
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("INSERT INTO uploads (filename, emotion) VALUES (?, ?)", (filename, emotion))
+            conn.commit()
+            conn.close()
+        except Exception as db_error:
+            print(f"Database logging failed: {db_error}")
+            # Continue anyway - logging failure shouldn't break the prediction
+        
+        # Clear memory
+        del img, prediction
+        
+        return jsonify({
+            'emotion': emotion,
+            'confidence': round(confidence, 2)
+        })
+        
+    except Exception as e:
+        print(f"Prediction error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

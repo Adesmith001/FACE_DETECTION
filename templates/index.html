@@ -424,14 +424,15 @@
                     body: formData
                 });
                 
-                const result = await response.text();
+                // Parse JSON response
+                const data = await response.json();
                 
-                if (response.ok) {
+                if (response.ok && data.emotion) {
                     // Show success result
-                    showResult(result);
+                    showResult(data.emotion, data.confidence);
                 } else {
                     // Show error
-                    showError(result || 'An error occurred. Please try again.');
+                    showError(data.error || 'An error occurred. Please try again.');
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -445,16 +446,22 @@
         });
         
         // Show success result
-        function showResult(result) {
+        function showResult(emotion, confidence) {
             resultSection.classList.add('show', 'success');
             
-            // Extract emotion from result text (e.g., "Predicted Emotion: Happy")
-            const emotion = result.replace('Predicted Emotion: ', '').trim();
             const emoji = emotionEmojis[emotion] || '😊';
             
             document.getElementById('resultIcon').textContent = emoji;
             document.getElementById('resultTitle').textContent = emotion;
-            document.getElementById('resultMessage').textContent = result;
+            
+            // Show confidence if available
+            if (confidence) {
+                document.getElementById('resultMessage').textContent = 
+                    `Your emotion is detected as ${emotion} with ${confidence}% confidence.`;
+            } else {
+                document.getElementById('resultMessage').textContent = 
+                    `Your emotion has been detected as ${emotion}!`;
+            }
             
             // Scroll to result
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
